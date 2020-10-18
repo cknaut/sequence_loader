@@ -45,8 +45,8 @@ class Driver():
         actual_freq = self.instrument.query('SOUR:FREQ?')
         assert actual_freq == frequency, f"Clock rate is {actual_freq} but should be {frequency}."
 
-
-    def importwaveformfromrawdata(self,waveform_name,waveform):
+    def importwaveformfromrawdata(self, waveform_name,waveform):
+        """ TODO: This function is defined two times, see below."""
         size = 1024
         self.instrument.write('WLIS:WAV:NEW "{name}", {size}'.format(name=waveform_name,size=size))
         self.instrument.write('SYST:ERR?')
@@ -74,124 +74,132 @@ class Driver():
 
         return
 
-    def importwaveformfromrawdata(self,waveform_name,waveform):
+    def checkerror(self):
+        """Checks for error."""
+        return self.instrument.query('SYST:ERR?')
+
+    def importwaveformfromrawdata(self, waveform_name, waveform):
+        """ TODO: This function is defined two times, see above."""
 
         size = len(waveform)
 
-        #Define a new waveform
+        # Define a new waveform
         self.instrument.write('WLIS:WAV:NEW "{name}", {size}'.format(name=waveform_name,size=size))
 
         #self.instrument.write('SYST:ERR?')
         #print(self.instrument.read())
 
-        #Load data to waveform
-        self.instrument.write_binary_values('WLIS:WAV:DATA "{name}",0,'.format(name = waveform_name), waveform.tolist())
+        # Load data to waveform
+        self.instrument.write_binary_values('WLIS:WAV:DATA "{name}",0,'.format(name=waveform_name), waveform.tolist())
 
-        self.instrument.write('SYST:ERR?')
+        return self.checkerror()
 
-        return self.instrument.read()
+    def loadwaveforms(self, names, waveforms):
+        """ Delete previous waveforms and upload new one.
 
+        :names: Names of waveforms
+        :waveforms: Waveforms to upload
+        """
 
-    def loadwaveforms(self,names,waveforms):
-
-        #Delete previous waveforms
+        # Delete previous waveforms.
         self.instrument.write('WLIS:WAV:DEL ALL')
         self.instrument.write('SLIS:SEQ:DEL ALL')
 
-        #Load list of waveforms
+        # Load list of waveforms.
         for i in np.arange(np.size(names)):
             importwaveformfromrawdata(self.instrument,names[i],waveforms[i])
 
-        self.instrument.write('SYST:ERR?')
-        return self.instrument.read()
+        return self.checkerror()
 
-
-    def loadsinglewaveform(self,names,waveforms):
+    def loadsinglewaveform(self, names, waveforms):
+        """ TODO: Docstring  """
 
         self.instrument.write("WLIS:LIST?")
         out = self.instrument.read()
-        out=','+out[1:-2]+','
+        out = ','+out[1:-2]+','
         if out.find(','+names+',')>-1:
             self.instrument.write('WLIS: DEL '+names)
         self.instrument.write('WLIS:WAV:DEL "'+str(names)+'"')
-        #Load list of waveforms
+        # Load list of waveforms
+        self.importwaveformfromrawdata(names, waveforms)
 
-        self.importwaveformfromrawdata(names,waveforms)
+        return self.checkerror()
 
-        self.instrument.write('SYST:ERR?')
-        return self.instrument.read()
-
-    def configuresequenceinchunks(self,sequence_name,element_names,wait_triggers,
-                              flagsA,flagsB,flagsC,flagsD,repeats,jump_triggers,gotos,jump_steps):
+    def configuresequenceinchunks(self, sequence_name, element_names, wait_triggers,
+                                  flagsA, flagsB, flagsC, flagsD, repeats, jump_triggers, gotos, jump_steps):
+        """ TODO: Docstring  """
 
         step_num = np.size(element_names)
 
-        #Delete old sequences
+        # Delete old sequences
         self.instrument.write('SLIS:SEQ:DEL ALL')
 
-        #Add a new sequence
-        self.instrument.write('SLIS:SEQ:NEW  "{name}", {size}'.format(name=sequence_name,size=step_num))
+        # Add a new sequence
+        # TODO: sizstep_num is not defined.
+        self.instrument.writef(f'SLIS:SEQ:NEW  "{sequence_name}", {sizstep_num}')
 
-        #Whether jump happens immediately or at end of step, default = end
-        self.instrument.write('SLIS:SEQ:EVEN:JTIM "{name}", END'.format(name=sequence_name))
+        # Whether jump happens immediately or at end of step, default = end
+        self.instrument.write(f'SLIS:SEQ:EVEN:JTIM "{sequence_name}", END')
 
-        #Whether flags toggle on repeat, default = off
-        self.instrument.write('SLIS:SEQ:RFL "{name}", OFF'.format(name=sequence_name))
-
+        # Whether flags toggle on repeat, default = off
+        self.instrument.write(f'SLIS:SEQ:RFL "{sequence_name}", OFF')
 
         for step in np.arange(step_num):
 
-            #Add a step for each wavform
+            # Add a step for each wavform
             waveform = element_names[step]
-            self.instrument.write('SLIS:SEQ:STEP{step}:TASS1:WAV "{sequence}", "{waveform}"'.format(step=step+1,sequence=sequence_name,waveform = waveform))
+            self.instrument.write(
+                f'SLIS:SEQ:STEP{step+1}:TASS1:WAV "{sequence_name}", "{waveform}"'
+            )
 
-            #Whether to wait for A or B trigger, default = off
-            wtrigger = wait_triggers[step] #'ATR','BTR','OFF'
-            self.instrument.write('SLIS:SEQ:STEP{step}:WINP "{sequence}",{trigger}'.format(step=step+1,sequence=sequence_name,trigger=wtrigger))
+            # Whether to wait for A or B trigger, default = off
+            wtrigger = wait_triggers[step] # 'ATR','BTR','OFF'
+            self.instrument.write('SLIS:SEQ:STEP{step}:WINP "{sequence}",{trigger}'.format(step=step+1,sequence=sequence_name, trigger=wtrigger))
 
-            #Set flags
-            flagA = flagsA[step] #HIGH,LOW,PULSE,TOGG,NCH
+            # Set flags
+            flagA = flagsA[step] # HIGH,LOW,PULSE,TOGG,NCH
             flagB = flagsB[step]
             flagC = flagsC[step]
             flagD = flagsD[step]
-            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:AFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name,flag=flagA))
-            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:BFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name,flag=flagB))
-            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:CFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name,flag=flagC))
-            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:DFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name,flag=flagD))
+            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:AFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name, flag=flagA))
+            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:BFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name, flag=flagB))
+            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:CFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name, flag=flagC))
+            self.instrument.write('SLIS:SEQ:STEP{step}:TFL1:DFL "{sequence}",{flag}'.format(step=step+1,sequence=sequence_name, flag=flagD))
 
-            #Set repeat count
+            # Set repeat count
             repeat = repeats[step] #'INF','ONCE'
-            self.instrument.write('SLIS:SEQ:STEP{step}:RCO "{sequence}",{repeat}'.format(step=step+1,sequence=sequence_name,repeat=repeat))
+            self.instrument.write('SLIS:SEQ:STEP{step}:RCO "{sequence}",{repeat}'.format(step=step+1, sequence=sequence_name, repeat=repeat))
 
-            #Whether to jump on A or B trigger, default = off
+            # Whether to jump on A or B trigger, default = off
             jtrigger = jump_triggers[step] #'ATR','BTR','OFF'
-            self.instrument.write('SLIS:SEQ:STEP{step}:EJIN "{sequence}",{trigger}'.format(step=step+1,sequence=sequence_name,trigger=jtrigger))
+            self.instrument.write('SLIS:SEQ:STEP{step}:EJIN "{sequence}",{trigger}'.format(step=step+1, sequence=sequence_name, trigger=jtrigger))
 
-            #Sets Goto
+            # Sets Goto
             goto = gotos[step] #'NEXT','FIRS','LAST','END',#
-            self.instrument.write('SLIS:SEQ:STEP{step}:GOTO "{sequence}",{goto}'.format(step=step+1,sequence=sequence_name,goto=goto))
+            self.instrument.write('SLIS:SEQ:STEP{step}:GOTO "{sequence}",{goto}'.format(step=step+1, sequence=sequence_name, goto=goto))
 
-            #sets step to jump to
+            # sets step to jump to
             jumpto = jump_steps[step] #'NEXT','FIRS','LAST','END',#
-            self.instrument.write('SLIS:SEQ:STEP{step}:EJUM "{sequence}",{jumpto}'.format(step=step+1,sequence=sequence_name,jumpto=jumpto))
+            self.instrument.write('SLIS:SEQ:STEP{step}:EJUM "{sequence}",{jumpto}'.format(step=step+1, sequence=sequence_name, jumpto=jumpto))
 
         return
 
-    def load_seq_csv(self,file):
+    def load_seq_csv(self, file):
+        """ TODO: Docstring  """
 
-        seq_table = np.loadtxt(file,dtype='str',skiprows=1,delimiter=',',encoding='utf8')
+        seq_table = np.loadtxt(file, dtype='str', skiprows=1, delimiter=',', encoding='utf8')
 
-        step_names = seq_table[:,1]
+        step_names = seq_table[:, 1]
 
-        wait_triggers  = ['OFF']*np.size(step_names)
+        wait_triggers = ['OFF']*np.size(step_names)
 
-        jump_triggers = seq_table[:,7]
+        jump_triggers = seq_table[:, 7]
 
-        jump_steps = seq_table[:,8]
+        jump_steps = seq_table[:, 8]
 
-        gotos = seq_table[:,9]
+        gotos = seq_table[:, 9]
 
-        repeats = seq_table[:,6]
+        repeats = seq_table[:, 6]
 
         event_jumps = np.zeros_like(step_names)
 
@@ -200,11 +208,25 @@ class Driver():
         flagsC = seq_table[:,4]
         flagsD = seq_table[:,5]
 
-        return [step_names,wait_triggers,flagsA,flagsB,flagsC,flagsD,repeats,jump_triggers,gotos,jump_steps]
+        return_list = [
+            step_names,
+            wait_triggers,
+            flagsA,
+            flagsB,
+            flagsC,
+            flagsD,
+            repeats,
+            jump_triggers,
+            gotos,
+            jump_steps
+        ]
 
-    def generateDJtable(self, seqname, pattern,step):
+        return return_list
 
-        #Check number of steps
+    def generateDJtable(self, seqname, pattern, step):
+        """ TODO: Docstring  """
+
+        # Check number of steps
         self.instrument.write('SLIST:SEQUENCE:LENGTH? "{seq}"'.format(seq=seqname))
         a = self.instrument.read()
         print(a)
@@ -236,7 +258,8 @@ class Driver():
 
         return
 
-    def assignsequence(self,seqname):
+    def assignsequence(self, seqname):
+        """ TODO: Docstring  """
 
         self.instrument.write('CASS:SEQ "{seqname}", 1'.format(seqname=seqname))
         time.sleep(3)
@@ -245,7 +268,8 @@ class Driver():
 
         return
 
-    def configureNewSequence(self,sequence_name,step_num):
+    def configureNewSequence(self, sequence_name, step_num):
+        """ TODO: Docstring  """
 
         #Delete old sequences
         self.instrument.write('SLIS:SEQ:DEL ALL')
@@ -263,6 +287,8 @@ class Driver():
 
     def addSeqElements(self,sequence_name,element_names,wait_triggers,
                                 flagsA,flagsB,flagsC,flagsD,repeats,jump_triggers,gotos,jump_steps,stepTar=None):
+
+        """ TODO: Docstring  """
 
         step_num = np.size(jump_steps)
         if step_num==1:
